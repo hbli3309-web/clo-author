@@ -38,7 +38,7 @@ These are non-negotiable. Every agent checks against them. Violations are deduct
 
 **INV-15.** All packages/libraries loaded at the top of the script, before any data loading or computation.
 
-**INV-16.** No absolute paths. All paths relative to project root via `here()` (R), `pathlib.Path` (Python), or `joinpath(@__DIR__, ...)` (Julia).
+**INV-16.** No absolute paths. All paths relative to project root via `here()` (R), `pathlib.Path` (Python), `joinpath(@__DIR__, ...)` (Julia), or project-root macros set in a central `_setup.do` (Stata) — typically `$root`, `$rawdata`, `$workingdata`, `$tempdata`, `$figure`, `$table` (lowercase paths; reserve `UPPER_SNAKE_CASE` for tunable constants like `$SEED`, `$N_BOOT`). No `cd` outside `_setup.do`.
 
 **INV-17.** No growing vectors/lists in loops. Pre-allocate result containers or use vectorized operations.
 

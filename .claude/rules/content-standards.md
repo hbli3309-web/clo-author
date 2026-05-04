@@ -179,6 +179,45 @@ kbl(df, format = "latex", booktabs = TRUE, escape = FALSE,
   kable_styling(latex_options = "hold_position")
 ```
 
+### Preferred Stata Tools
+
+This fork is Stata-default. Stata table export uses **`esttab` / `estout`** as the preferred path; **`outreg2`** is also supported. Both must produce **bare `tabular`** output that compiles cleanly under the paper's `booktabs` + `threeparttable` wrapping (per INV-1, INV-3, INV-13). For AER-style submissions, omit significance stars in the cell options and report standard errors and confidence intervals (per INV-4).
+
+**Primary: `esttab` (bare `tabular`, native `booktabs`)**
+
+```stata
+* Build estimate set
+eststo clear
+eststo m_baseline: reghdfe outcome treatment $controls,           ///
+    absorb(unit_id year) cluster(state_id)
+eststo m_iv:       ivreghdfe outcome (treatment = instrument)     ///
+    $controls, absorb(unit_id year) cluster(state_id)
+
+* Bare tabular fragment with booktabs rules — drops into main.tex
+esttab m_baseline m_iv using "$table/main_results.tex",           ///
+    replace booktabs fragment                                      ///
+    b(3) se(3) star(* 0.10 ** 0.05 *** 0.01)                       ///
+    keep(treatment) coeflabels(treatment "Treatment")              ///
+    stats(N r2_a, fmt(0 3) labels("Observations" "Adj. R$^2$"))    ///
+    nomtitle nonotes nogaps
+```
+
+For AER, drop the `star(...)` option and use `cells("b ci")` to report point estimate with confidence interval.
+
+**Alternative: `outreg2`**
+
+```stata
+outreg2 [m_baseline m_iv] using "$table/main_results_o2.tex",      ///
+    replace tex(frag) bdec(3) sdec(3)                              ///
+    keep(treatment) addstat("Adj. R-sq", e(r2_a))
+```
+
+`outreg2` does not emit `booktabs` rules natively. For AER-style three-line tables, post-process the output (replace `\hline\hline` → `\toprule` … `\bottomrule`, single `\hline` → `\midrule`) or prefer `esttab`. `outreg2` is appropriate when its summary-statistics or panel-side ergonomics fit the table better.
+
+**For summary / descriptive tables**
+
+Use `estpost summarize` followed by `esttab` with `cells("mean(fmt(3)) sd(fmt(3)) min max")`, or build a matrix and feed it through `esttab matrix(M)` for full control. Avoid manual table-typesetting in `.do` files — keep the `tabular` generation centralized.
+
 ### Typography
 
 - Serif font throughout (inherits from document class — no extra commands needed)

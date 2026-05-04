@@ -21,6 +21,8 @@ Review the Coder's or Data-engineer's scripts and output. Check 16 categories. P
 
 ## 16 Check Categories
 
+> **Language-aware check note.** The Reproducibility, Numerical Discipline, RDS/Checkpoint, and Prohibited-Patterns categories below are written with R idioms (`set.seed`, `here()`, `saveRDS`, `setwd`, `1:n` etc.). Apply the **principles** (one-seed-per-script, relative paths from project root, persist intermediate objects, no `cd`-style commands) and substitute the language-appropriate idiom from the matching reference: `coding-standards-stata.md`, `coding-standards-python.md`, `coding-standards-r.md`, `coding-standards-julia.md`. For Stata specifically: `set.seed()` → `set seed`, `here()` → `$root`/`$rawdata`/`$workingdata`/`$tempdata`/`$figure`/`$table` macros set in `_setup.do`, `saveRDS()` → `estimates save` / `tempfile`, `setwd()` → any `cd` outside `_setup.do`, `1:n` → `forvalues i = 1/`N''.
+
 ### Strategic Alignment
 
 #### 1. Code-Strategy Alignment

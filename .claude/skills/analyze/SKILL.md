@@ -60,12 +60,19 @@ Dispatch **Coder** agent:
 - Save scripts to `scripts/R/` (or appropriate language directory)
 
 The Coder follows these principles:
-- **Script structure:** Use the Script Structure Template below
-- **Packages:** `fixest` for panel data, `modelsummary` for tables, `ggplot2` for figures
-- **Standard errors:** Cluster at appropriate level (match treatment assignment)
-- **Output:** `.tex` tables for LaTeX, `.pdf`/`.png` figures, `.rds` for intermediate objects
-- **No hardcoded paths.** All paths relative to repository root.
-- **saveRDS everything.** Every computed object (estimates, model fits, data frames, summary statistics) gets serialized to `.rds` for downstream use by the writer and other agents.
+- **Language:** default to **Stata** unless `CLAUDE.md` declares otherwise. Priority: Stata > Python > R > Julia. Read `.claude/references/coding-standards-<language>.md` before writing code.
+- **Script structure:** Use the Script Structure Template below (Stata default; substitute idioms for the declared language).
+- **Packages by language:**
+  - Stata: `reghdfe` for panel/HDFE, `boottest` for inference, `csdid`/`did_imputation` for staggered DiD, `rdrobust` for RDD, `binsreg`/`coefplot` for figures, `esttab`/`estout` for tables.
+  - Python: `linearmodels`/`statsmodels` for estimation, `polars`/`pandas` for wrangling, `matplotlib`/`seaborn` for figures, `pyfixest` when staying close to R/Stata syntax.
+  - R: `fixest` for panel data, `modelsummary` for tables, `ggplot2` for figures.
+- **Standard errors:** Cluster at appropriate level (match treatment assignment) — exact level set by the project's local `CLAUDE.md`, not a global default.
+- **Output:** `.tex` tables (bare `tabular`, per INV-13) for LaTeX, `.pdf`/`.png` figures, language-appropriate format for intermediate objects (see "Persist intermediate objects" below).
+- **No hardcoded paths.** All paths relative to project root via the language-appropriate construct (Stata: `$root`/`$rawdata`/`$workingdata`/`$tempdata`/`$figure`/`$table` set in `_setup.do`; Python: `pathlib.Path` from a project-root anchor; R: `here()`).
+- **Persist intermediate objects.** Every computed object (estimates, model fits, panels, summary statistics) gets serialized for downstream use by the writer and other agents:
+  - Stata: `estimates save` for models; `tempfile` / `save` for datasets; matrices via `matrix` to `.dta`.
+  - Python: `.parquet` (preferred) or `.pkl` for dataframes; `joblib.dump` for fitted models.
+  - R: `saveRDS()` for any object.
 
 ### Step 4: Code Review
 Dispatch **coder-critic** agent — run the full 12-category checklist:
@@ -81,7 +88,7 @@ Dispatch **coder-critic** agent — run the full 12-category checklist:
 6. **Reproducibility** — `set.seed()` at top if any stochastic elements. No absolute paths. All packages loaded at top. Directory creation with `showWarnings = FALSE`.
 7. **Functions** — Repeated logic extracted into functions. No copy-paste code blocks with minor variations.
 8. **Figure quality** — Publication-ready: proper axis labels, titles, legends, font sizes. Consistent theme across all figures.
-9. **RDS pattern** — Every computed object (models, data frames, summary stats) saved via `saveRDS()` for downstream use. Not just final outputs — intermediate objects too.
+9. **Persistence pattern** — Every computed object (models, data frames, summary stats) is serialized for downstream use via the language-appropriate path (`estimates save` / `tempfile` for Stata, `.parquet` / `joblib` for Python, `saveRDS()` for R). Not just final outputs — intermediate objects too.
 10. **Comments** — Section headers present. Non-obvious code commented. No commented-out dead code left behind.
 11. **Error handling** — Graceful handling of missing files, empty data subsets, convergence failures. Informative error messages.
 12. **Polish** — Consistent naming conventions. No magic numbers. Clean whitespace. Professional quality ready for replication package.
@@ -105,36 +112,82 @@ If coder-critic finds Critical or Major issues:
 
 ## Script Structure Template
 
+The structure is the same across languages — header block, setup, data, analysis, output, persistence — only the syntax differs. Stata is shown first (default).
+
+### Stata (`.do`)
+
+```stata
+*===============================================================
+* [Descriptive Title]
+* Author: [from project context]
+* Purpose: [What this script does]
+* Inputs:  [Data files]
+* Outputs: [Figures, tables, persisted estimates]
+*===============================================================
+
+* 0. Setup --------------------------------------------------
+do "scripts/stata/_setup.do"   // version 18, set seed, $root / $rawdata / $workingdata / $tempdata / $figure / $table, set type double
+cap mkdir "$table"
+cap mkdir "$figure"
+
+* 1. Data Loading -------------------------------------------
+use "$workingdata/analysis_panel.dta", clear
+
+* 2. Exploratory Analysis -----------------------------------
+
+* 3. Main Analysis ------------------------------------------
+eststo clear
+eststo m_baseline: reghdfe outcome treatment $controls, absorb(unit_id year) cluster(state_id)
+
+* 4. Tables and Figures -------------------------------------
+* Preferred: esttab (native booktabs / AER fragment) — recommended for AER-style three-line tables
+esttab m_baseline using "$table/main_results.tex", replace booktabs fragment ///
+    b(3) se(3) keep(treatment) nomtitle nonotes nogaps
+
+* Alternative: outreg2 — also supported. Note: outreg2 does not emit booktabs
+* rules natively, so for AER-style tables either post-process the output or
+* prefer esttab. Use outreg2 when you need its summary-stats / panel-side
+* features that esttab handles awkwardly.
+* outreg2 [m_baseline] using "$table/main_results_o2.tex", replace tex(frag) ///
+*     bdec(3) sdec(3) keep(treatment)
+
+* 5. Export -------------------------------------------------
+estimates save "$workingdata/m_baseline.ster", replace
+```
+
+### Python (`.py`) — secondary
+
+```python
+# ============================================================
+# [Descriptive Title]
+# Purpose / Inputs / Outputs as above
+# ============================================================
+from pathlib import Path
+import polars as pl
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[2]
+SEED = 42
+np.random.default_rng(SEED)
+
+# Load → analyze → export tables to ROOT/'paper/tables', figures to ROOT/'paper/figures'
+# Persist objects via parquet / joblib.
+```
+
+### R (`.R`) — tertiary
+
 ```r
 # ============================================================
 # [Descriptive Title]
-# Author: [from project context]
-# Purpose: [What this script does]
-# Inputs: [Data files]
-# Outputs: [Figures, tables, RDS files]
 # ============================================================
 
 # 0. Setup ----
-library(tidyverse)
-library(fixest)
-library(modelsummary)
-
+library(tidyverse); library(fixest); library(modelsummary)
 set.seed(42)
-
 dir.create("paper/tables", recursive = TRUE, showWarnings = FALSE)
 dir.create("paper/figures", recursive = TRUE, showWarnings = FALSE)
 
-# 1. Data Loading ----
-
-# 2. Exploratory Analysis ----
-
-# 3. Main Analysis ----
-
-# 4. Tables and Figures ----
-
-# 5. Export ----
-# saveRDS(model_fit, "scripts/R/output/model_fit.rds")
-# saveRDS(main_results, "scripts/R/output/main_results.rds")
+# 1. Data → 2. EDA → 3. Main → 4. Tables/Figures → 5. saveRDS()
 ```
 
 ---
@@ -190,6 +243,6 @@ Inspired by Scott Cunningham's replication methodology: **if two independent imp
 - **Show your work.** Print summary statistics before jumping to regressions.
 - **Strategy alignment.** If strategy memo exists, code MUST implement it faithfully.
 - **Worker-critic pairing.** Coder creates, coder-critic critiques. Never skip review.
-- **saveRDS everything.** Every computed object gets saved via `saveRDS()` for downstream use — model fits, cleaned data frames, summary statistics, not just final tables.
+- **Persist intermediate objects.** Every computed object gets serialized for downstream use — model fits, cleaned panels, summary statistics, not just final tables. Use `estimates save` / `tempfile` (Stata), `.parquet` or `joblib` (Python), `saveRDS()` (R).
 - **Publication-ready output.** Tables and figures directly includable in the paper.
 - **Cross-language convergence.** When `--dual` is used, divergence is a bug until proven otherwise.

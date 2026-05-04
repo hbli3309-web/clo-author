@@ -25,11 +25,12 @@ Read the strategy memo to identify the paper type:
 - **Theory + empirics** — test model predictions with data
 - **Descriptive / measurement** — construct measures, document facts
 
-Read `CLAUDE.md` for the project's declared analysis language. Default to R if not specified. Support R, Python, and Julia.
+Read `CLAUDE.md` for the project's declared analysis language. Default to **Stata** if not specified. Supported alternatives: Python, R, Julia. Language priority on this fork: Stata > Python > R > Julia.
 
 **Before writing code**, read the language-specific coding standards:
-- R: `.claude/references/coding-standards-r.md`
+- Stata: `.claude/references/coding-standards-stata.md`
 - Python: `.claude/references/coding-standards-python.md`
+- R: `.claude/references/coding-standards-r.md`
 - Julia: `.claude/references/coding-standards-julia.md`
 
 These standards are non-negotiable. The coder-critic enforces them.
@@ -38,31 +39,33 @@ These standards are non-negotiable. The coder-critic enforces them.
 
 ## Project Layout
 
-Every project uses numbered scripts with a master runner:
+Every project uses numbered scripts with a master runner. The layout below is shown for the **Stata default**; substitute `.do` → `.py` → `.R` → `.jl` when the project's `CLAUDE.md` declares a different language.
 
 ```
-scripts/R/
-├── 00_master.R              # Runs everything in sequence
-├── 01_setup.R               # Paths, libraries, seed, parameters
-├── 02_data_preparation.R    # Load, clean, construct panel
-├── 03_descriptive.R         # Summary statistics, balance tables
-├── 04_estimation.R          # Main specification
-├── 05_robustness.R          # All robustness checks
-├── 06_figures.R             # All figures
-├── 07_tables.R              # All tables (exports bare tabular)
-└── functions/               # One function per file, file name = function name
-    ├── estimate_*.R
-    ├── test_*.R
-    └── helpers.R
+scripts/stata/                  # Default language
+├── 00_master.do             # Runs everything in sequence
+├── _setup.do                # version 18, set seed, $root/$rawdata/$workingdata/$tempdata/$figure/$table globals
+├── 02_data_preparation.do   # Load, clean, construct panel
+├── 03_descriptive.do        # Summary statistics, balance tables
+├── 04_estimation.do         # Main specification
+├── 05_robustness.do         # All robustness checks
+├── 06_figures.do            # All figures (graph export)
+├── 07_tables.do             # All tables (esttab → bare tabular)
+└── ado/                     # One program per file, file name = program name
+    ├── estimate_*.ado
+    ├── test_*.ado
+    └── *.sthlp              # Help files for reusable programs
 ```
 
-Each script is self-contained given that its predecessors have run. No circular dependencies. `00_master.R` calls them sequentially.
+For Python: `scripts/python/` with `00_master.py`, `01_setup.py`, ..., and `functions/` with one function per `.py` file. For R: `scripts/R/` with `00_master.R`, ..., `functions/` with one function per `.R` file (file name = function name). For Julia: `scripts/julia/` analogous.
+
+Each script is self-contained given that its predecessors have run. No circular dependencies. The master script calls them sequentially.
 
 ---
 
 ## Paper-to-Code Naming Map
 
-**Produce this for every project.** Include in `01_setup.R` as a comment block and in the results summary.
+**Produce this for every project.** Include in the project's setup script (`_setup.do` for Stata, `01_setup.R` for R, `01_setup.py` for Python, etc.) as a comment block, and in the results summary.
 
 ```r
 # ============================================================
@@ -193,6 +196,23 @@ Every robustness test from the strategy memo. Implementation varies by paper typ
 - All outputs saved to `paper/tables/` and `paper/figures/`
 - `results_summary.md` with key findings, effect sizes, and interpretation notes for the Writer
 - Paper-to-code naming map included in results summary
+
+---
+
+## Language-Specific Implementation Details
+
+The standards in the sections below — **Numerical Standards**, **Function Standards**, **Bootstrap and Parallelism**, **Script Standards** — are **principles**, not syntax. The example code is currently written in R idioms (`set.seed`, `future_lapply`, `here()`, `1L`/`0L`, `seq_len(n)`), but the underlying rules (float-comparison tolerance, CDF clamping, inverse-link guards, pre-allocation, one-seed-per-script, no hardcoded paths, fail-fast preconditions) apply to every supported language.
+
+When implementing in a non-R language, **read the corresponding language reference for the actual syntax** and translate the principle, not the line:
+
+| Language | Reference file | Syntax notes |
+|----------|----------------|--------------|
+| Stata | `.claude/references/coding-standards-stata.md` | `version 18`, `set seed`, `assert`, `mreldif()`, `tempfile`, `boottest`, `frames`, project-root globals (`$root`/`$rawdata`/`$workingdata`/`$tempdata`/`$figure`/`$table`) via `_setup.do` |
+| Python | `.claude/references/coding-standards-python.md` | `np.random.default_rng(seed)`, `pathlib.Path`, `joblib.Parallel`, `np.allclose()` |
+| R | `.claude/references/coding-standards-r.md` | the idioms used in this file |
+| Julia | `.claude/references/coding-standards-julia.md` | `Random.seed!`, `joinpath(@__DIR__, ...)`, `pmap`/`Threads.@threads` |
+
+If you copy the R example below verbatim into a `.do` or `.py` file, the coder-critic will catch it. The principle ports; the syntax does not.
 
 ---
 

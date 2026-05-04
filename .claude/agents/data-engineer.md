@@ -33,6 +33,16 @@ You are a **data engineer** — the person who takes messy raw data and turns it
 
 ### 2. Publication-Quality Figures
 
+> **Language-aware figure toolkit.** This fork is Stata-default. Pick the toolkit that matches the project's declared language (per `CLAUDE.md`). The style standards below (no titles inside the figure per INV-12, sentence-case labels, colorblind-safe palette, explicit dimensions, bottom legend, minimal grid) apply to every toolkit; the syntax differs.
+>
+> | Language | Default toolkit | Export idiom |
+> |----------|-----------------|--------------|
+> | **Stata** (default) | `graph` / `binsreg` / `coefplot` / `grstyle` for theming | `graph export "$figure/<name>.pdf", replace` |
+> | **Python** (when selected, esp. structural) | `matplotlib` / `seaborn` (and `polars` upstream) | `fig.savefig(FIG / "<name>.pdf", bbox_inches="tight")` |
+> | **R** (when selected) | `ggplot2` with a custom theme (the laundry list below) | `ggsave(file.path("paper/figures", "<name>.pdf"), ...)` |
+>
+> The R example block is shown in detail because that is the upstream clo-author convention; translate the principles to Stata or Python from the matching reference (`coding-standards-stata.md`, `coding-standards-python.md`).
+
 #### Style Standards
 - **Custom ggplot2 theme** — never use default gray
 - **Color palette:** Consistent across all figures; colorblind-safe (e.g., `viridis`, `RColorBrewer` qualitative)

@@ -70,3 +70,17 @@ When a mistake is corrected, append a `[LEARN:category]` entry below.
 [LEARN:meta] Dogfooding principles must be enforced: plan-first, spec-then-plan, quality gates, session logs → we follow our own guide.
 
 [LEARN:meta] Template development work (building infrastructure, docs) doesn't create session logs in quality_reports/ → those are for user work (slides, analysis), not meta-work. Keeps template clean for users who fork.
+
+---
+
+## Future TODO — clo-author fork housekeeping (added 2026-05-04)
+
+These items were raised during the 2026-05-04 Stata-default adaptation of the fork. Item 1 from that plan's Open Questions list (stata-mcp connector name) is resolved (`mcp__stata-mcp__*`, hyphenated) and was therefore not carried over. The remaining four are persisted here so they don't dissolve into a session log.
+
+1. **MATLAB integration.** `CLAUDE.md` currently mentions MATLAB as a known structural-estimation tool but no agent, skill, or permission work has been done. When the first structural project lands that needs MATLAB, add: (a) `Bash(matlab -batch *)` in settings.json, (b) a `coding-standards-matlab.md` reference, (c) language entry in coder.md / coder-critic.md / verifier.md / analyze/SKILL.md routing tables.
+
+2. **R retention discipline.** The 2026-05-04 adaptation kept R coding-standards reference and the R-shaped sections in coder.md / coder-critic.md / content-standards.md intact. Watch for drift: when adding new content, do not force a parallel R example unless an active R project warrants it. The fork is Stata-default, not Stata-only.
+
+3. **data-engineer.md deep refactor (deferred).** The 2026-05-04 edit added only a language-aware figure-toolkit block-quote note at the top of §2; the package table at lines ~95–100 and the "Custom ggplot2 theme" section below it are still 100% R-flavored. When the first project actually needs Stata or Python figures end-to-end, replace the package table with a language-branched version and add Stata `grstyle`/`schemepack` style guidance.
+
+4. **settings.json housekeeping.** Two cosmetic issues were left untouched on 2026-05-04: (a) stale allow entries from a prior session (`Bash(do if:*)`, `Bash(then echo:*)`, `Bash(fi)`, the literal `find ~/Desktop -iname *ABDC*`, `Edit(/.claude/skills/review/**)` with leading slash that won't match); (b) `additionalDirectories` references `/Users/hsantanna/repos/clo-author/...` (upstream maintainer's home, not mine). Clean up only after confirming the hooks don't depend on these paths.
