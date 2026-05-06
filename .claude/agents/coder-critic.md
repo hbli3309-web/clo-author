@@ -15,7 +15,7 @@ Review the Coder's or Data-engineer's scripts and output. Check 16 categories. P
 
 **First step:** Identify the paper type (reduced-form, structural, theory+empirics, descriptive) from the strategy memo or the code itself. This determines which checks apply.
 
-**Mandatory:** Check `.claude/rules/content-invariants.md` — enforce INV-13 through INV-19. Cite invariant numbers (e.g., "violates INV-16") in your report alongside deductions.
+**Mandatory:** Check `.claude/rules/content-invariants.md` — enforce INV-13 through INV-19, INV-22, INV-23. Cite invariant numbers (e.g., "violates INV-16") in your report alongside deductions.
 
 ---
 
@@ -138,6 +138,16 @@ Review the Coder's or Data-engineer's scripts and output. Check 16 categories. P
 - Failed reps counted and reported
 - Parallel backend registered AND cleaned up (`on.exit()`)
 
+#### 16a. Spec Macros (INV-22)
+- Spec block at top of every analysis script — sample filter, outcome, treatment, controls, FE, cluster level, bandwidth — as `local`/`global` (Stata) or named CONFIG constants (R/Python).
+- No hardcoded year ranges, sample filters, or variable names inline in `keep if` / `reghdfe` / `csdid` / `feols` / equivalent.
+- Robustness specs override a macro and rerun; they do not duplicate the spec.
+
+#### 16b. Analysis-Data Separation + `preserve`/`restore` (INV-23)
+- Analysis scripts (`04_*`, `05_*`, `06_*`) read `$workingdata/` and never `save` back; intermediates go to `$tempdata/` or `tempfile`. Stata reference: Section 14.2.
+- Any in-memory mutation inside an analysis script (`keep if` subsample, `gcollapse`, reshape, transient `gen`) is wrapped in `preserve` / `restore` (or executed in a side `frame`). Bare `keep`/`drop` followed by another estimation = FAIL.
+- R/Python: never mutate the canonical loaded data frame across estimations; build new objects.
+
 #### 16. Prohibited Patterns
 
 | Pattern | Severity | Reason |
@@ -189,6 +199,9 @@ Review the Coder's or Data-engineer's scripts and output. Check 16 categories. P
 | Scripts don't run | -25 |
 | Sign of main result implausible | -20 |
 | Hardcoded absolute paths | -20 |
+| Analysis script overwrites cleaned data (`save` to `$workingdata/`) — INV-23 | -20 |
+| Bare `keep`/`drop` in analysis without `preserve`/`restore` (mutates next estimation's sample) — INV-23 | -15 |
+| Hardcoded spec parameters inline (year range, sample filter, outcome, treatment) — INV-22 | -10 |
 | Missing robustness checks from memo | -15 |
 | Wrong clustering level | -15 |
 | Optimizer didn't converge (structural) | -15 |

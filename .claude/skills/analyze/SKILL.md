@@ -119,41 +119,42 @@ The structure is the same across languages — header block, setup, data, analys
 ```stata
 *===============================================================
 * [Descriptive Title]
-* Author: [from project context]
-* Purpose: [What this script does]
-* Inputs:  [Data files]
-* Outputs: [Figures, tables, persisted estimates]
+* Author / Purpose / Inputs / Outputs
 *===============================================================
 
 * 0. Setup --------------------------------------------------
-do "scripts/stata/_setup.do"   // version 18, set seed, $root / $rawdata / $workingdata / $tempdata / $figure / $table, set type double
-cap mkdir "$table"
-cap mkdir "$figure"
+do "scripts/stata/_setup.do"   // version, seed, $root/$rawdata/$workingdata/$tempdata/$figure/$table
 
-* 1. Data Loading -------------------------------------------
+* 1. Spec block (INV-22) — edit here, not below ------------
+local sample_if    "year >= 2010 & year <= 2019 & age >= 25 & age <= 60"
+local outcome      log_wage
+local treatment    treat_post
+local controls     age age_sq i.educ i.industry
+local fe           "absorb(worker_id year)"
+local cluster_var  firm_id
+
+* 2. Data Loading (INV-23: read-only on $workingdata) ------
 use "$workingdata/analysis_panel.dta", clear
-
-* 2. Exploratory Analysis -----------------------------------
 
 * 3. Main Analysis ------------------------------------------
 eststo clear
-eststo m_baseline: reghdfe outcome treatment $controls, absorb(unit_id year) cluster(state_id)
+eststo m_baseline: reghdfe `outcome' `treatment' `controls' if `sample_if', `fe' cluster(`cluster_var')
 
-* 4. Tables and Figures -------------------------------------
-* Preferred: esttab (native booktabs / AER fragment) — recommended for AER-style three-line tables
-esttab m_baseline using "$table/main_results.tex", replace booktabs fragment ///
-    b(3) se(3) keep(treatment) nomtitle nonotes nogaps
+* Subsample estimation — preserve/restore so next estimation sees full sample
+preserve
+    keep if industry == 31
+    eststo m_mfg: reghdfe `outcome' `treatment' `controls' if `sample_if', `fe' cluster(`cluster_var')
+restore
 
-* Alternative: outreg2 — also supported. Note: outreg2 does not emit booktabs
-* rules natively, so for AER-style tables either post-process the output or
-* prefer esttab. Use outreg2 when you need its summary-stats / panel-side
-* features that esttab handles awkwardly.
-* outreg2 [m_baseline] using "$table/main_results_o2.tex", replace tex(frag) ///
-*     bdec(3) sdec(3) keep(treatment)
+* 4. Tables and Figures (esttab → bare booktabs fragment) --
+esttab m_baseline m_mfg using "$table/main_results.tex", replace booktabs fragment ///
+    b(3) se(3) keep(`treatment') nomtitle nonotes nogaps
 
-* 5. Export -------------------------------------------------
-estimates save "$workingdata/m_baseline.ster", replace
+* 5. Persist (intermediates → $tempdata, never $workingdata)
+estimates save "$tempdata/m_baseline.ster", replace
 ```
+
+`outreg2` is also supported (use when its summary-stats / panel-side ergonomics fit better) — it does not emit `booktabs` rules natively, so post-process or prefer `esttab` for AER-style three-line tables.
 
 ### Python (`.py`) — secondary
 

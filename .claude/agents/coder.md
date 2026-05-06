@@ -86,6 +86,8 @@ Match notation between paper and code exactly. The writer and coder-critic both 
 
 ## Stage 0: Data Cleaning and Preparation
 
+**Cleaning and analysis are separate (INV-23).** Cleaning scripts (`02_data_preparation.do` and friends) are the only writers of `$workingdata/`. Analysis scripts read with `use ..., clear` and never `save` back; intermediates go to `$tempdata/` or `tempfile`.
+
 Before the main specification, always start with data preparation:
 
 1. Load raw data, document dimensions and variable types
@@ -97,7 +99,17 @@ Before the main specification, always start with data preparation:
 7. Merge datasets (if applicable) — document merge rates, investigate non-merges
 8. Produce summary statistics table
 9. Produce balance table (treatment vs control) — for reduced-form papers
-10. Save cleaned dataset with documentation
+10. Save cleaned dataset with documentation — only cleaning scripts write to `$workingdata/`
+
+---
+
+## Spec Macros (INV-22) and Analysis-Stage Mutation (INV-23)
+
+Every analysis script opens with a **spec block** declaring sample filter, outcome, treatment, controls, FE set, cluster level, bandwidth — as `local` (script-scoped) or `global` (cross-script, in `_setup.do`). No hardcoded year ranges, sample filters, or variable names buried in `keep if` / `reghdfe` / `csdid`. Robustness checks override one macro and rerun.
+
+In-memory mutation inside an analysis script (subsample `keep if`, reshape, `gcollapse`) is wrapped in `preserve`/`restore` so the next estimation sees the same loaded sample. Use `frames` for two coexisting datasets. R/Python equivalent: a CONFIG block of named constants at top, and build new in-memory objects (`data_sub <- ...`) instead of mutating the canonical data frame.
+
+Full pattern, examples, and forbidden cases: `coding-standards-stata.md` Section 14.
 
 ---
 

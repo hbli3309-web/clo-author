@@ -178,7 +178,7 @@ Every reusable `.ado` ships with a `.sthlp` documenting `Description`, `Syntax`,
   tempfile cleaned
   save `cleaned', replace
   ```
-- **`frames` over `preserve`/`restore`** when working with two datasets simultaneously (Stata 16+); `preserve`/`restore` is fine for short scopes
+- **`preserve`/`restore` is required around any analysis-stage mutation** of the loaded dataset (subsample, on-the-fly variable construction, reshape, drop) — see Section 14 (Spec Discipline). Use `frames` instead when you genuinely need two datasets simultaneously (Stata 16+); avoid serial `preserve`/`restore` chains, but never let a `keep`/`drop`/`replace` leak into the next estimation's sample.
 - **Merges:** always `assert _merge ...` after, document expected master-only / using-only counts. Drop `_merge` before next merge
 - **`gen` vs `egen`:** use `egen` for group operations and aggregations; reaching for `egen` to do a simple transform is overkill
 - **I/O:** `use`, `save`, `merge`, `import delimited` / `export delimited`. Parquet via `parquet` (community package) when interoperating with Python/polars
@@ -320,3 +320,127 @@ Every project:
 - Stata is single-threaded outside Stata/MP commands — for embarrassingly parallel sims, use the `parallel` package or split runs across MCP sessions
 - The bootstrap loop is almost always the bottleneck — `boottest` is wildly faster than naive bootstrap when applicable
 - Profile with `set rmsg on` (per-command timing) before micro-optimizing
+
+---
+
+## 14. Spec Discipline and Analysis-Data Separation (INV-22, INV-23)
+
+Two rules so that "let me try a different sample / outcome / window" is a one-line edit at the top of the script, and so that estimation N° 7 sees the same dataset as estimation N° 1.
+
+### 14.1 Spec Macros — One Edit Surface (INV-22)
+
+Every spec parameter that the user might want to vary is declared **once** as a named macro at the top of the analysis script, then referenced everywhere downstream. This covers, at minimum:
+
+- Sample-selection filters (year range, age range, industry, geography)
+- Outcome / dependent variable(s)
+- Treatment definition
+- Control set
+- Fixed-effects set
+- Cluster level
+- Bandwidth (for RDD), reference period (for event study), event-time window
+
+**Use `global` for cross-script spec** (set once in `_setup.do` or a project spec block), **`local` for script-scoped spec** (set at the top of an analysis `.do`).
+
+```stata
+*===============================================================
+* 04_estimation.do — Main specification
+*===============================================================
+do "scripts/stata/_setup.do"
+
+* ---- Spec block (edit here, not below) ----
+local sample_if    "year >= 2010 & year <= 2019 & age >= 25 & age <= 60"
+local outcome      log_wage
+local treatment    treat_post
+local controls     age age_sq i.educ i.industry
+local fe           "absorb(worker_id year)"
+local cluster_var  firm_id
+* -------------------------------------------
+
+use "$workingdata/analysis_panel.dta", clear
+
+eststo clear
+eststo m_baseline: reghdfe `outcome' `treatment' `controls' if `sample_if', ///
+    `fe' cluster(`cluster_var')
+
+esttab m_baseline using "$table/main_results.tex", replace booktabs fragment ///
+    b(3) se(3) keep(`treatment') nomtitle nonotes nogaps
+```
+
+Equivalent with project-wide globals (use these when the same spec is shared across `04_estimation.do`, `05_robustness.do`, `06_figures.do`):
+
+```stata
+* in _setup.do or a dedicated _spec.do
+global sample_if   "year >= 2010 & year <= 2019 & age >= 25 & age <= 60"
+global outcome     log_wage
+global treatment   treat_post
+global controls    age age_sq i.educ i.industry
+global cluster_var firm_id
+
+* in 04_estimation.do
+reghdfe $outcome $treatment $controls if $sample_if, absorb(worker_id year) cluster($cluster_var)
+```
+
+**Forbidden in analysis code:**
+
+```stata
+* WRONG — hardcoded sample filter, hardcoded outcome
+keep if year >= 2010 & year <= 2019
+reghdfe log_wage treat_post age age_sq i.educ, absorb(worker_id year) cluster(firm_id)
+```
+
+The `local` / `global` block at the top is the single edit surface. Robustness checks that vary one spec parameter override the relevant macro and rerun — they do not duplicate the spec inline.
+
+### 14.2 Analysis-Data Separation + `preserve`/`restore` (INV-23)
+
+Cleaning produces canonical cleaned data on disk. Analysis reads that data and never overwrites it. **Concretely:**
+
+- `02_data_preparation.do` → writes `$workingdata/analysis_panel.dta` (and any analysis-ready derivatives)
+- `04_estimation.do`, `05_robustness.do`, `06_figures.do` → `use "$workingdata/analysis_panel.dta", clear`; **never `save` back** to `$workingdata/`. Intermediates that the analysis itself creates go to `$tempdata/` or `tempfile`
+
+Inside an analysis script you frequently need to mutate the loaded dataset for one estimation — drop observations for a subsample, build a one-off variable, reshape for an event-study, collapse for a cell-level regression. **Wrap the mutation in `preserve` / `restore`** so the next estimation sees the same as-loaded data:
+
+```stata
+use "$workingdata/analysis_panel.dta", clear
+
+* Estimation 1 — full sample
+eststo m_full: reghdfe `outcome' `treatment' `controls', `fe' cluster(`cluster_var')
+
+* Estimation 2 — subsample (manufacturing only); restore after
+preserve
+    keep if industry == 31
+    eststo m_mfg: reghdfe `outcome' `treatment' `controls', `fe' cluster(`cluster_var')
+restore
+
+* Estimation 3 — collapsed to firm-year for cell regression
+preserve
+    gcollapse (mean) `outcome' `treatment' `controls', by(firm_id year)
+    eststo m_cell: reghdfe `outcome' `treatment' `controls', absorb(firm_id year) cluster(firm_id)
+restore
+
+* Estimation 4 — back on the original loaded sample
+eststo m_alt: reghdfe `outcome' `treatment' alt_controls, `fe' cluster(`cluster_var')
+```
+
+When two datasets need to coexist (merging an aggregate-level panel with the individual-level one, or running an estimation on the cleaned data while keeping a different transform alive), use `frames` instead of nested `preserve`/`restore`:
+
+```stata
+frame copy default firm_year
+frame firm_year: gcollapse (mean) `outcome' `treatment', by(firm_id year)
+frame firm_year: reghdfe `outcome' `treatment', absorb(firm_id year) cluster(firm_id)
+* default frame is untouched
+```
+
+**Forbidden in analysis code:**
+
+```stata
+* WRONG — mutates the in-memory dataset; estimation 2 sees a different sample
+use "$workingdata/analysis_panel.dta", clear
+reghdfe outcome treat $controls, absorb(unit year) cluster(state)
+keep if industry == 31                          // bare keep — no preserve
+reghdfe outcome treat $controls, absorb(unit year) cluster(state)
+
+* WRONG — overwriting the cleaned file from an analysis script
+save "$workingdata/analysis_panel.dta", replace
+```
+
+**Cleaning scripts** (`02_data_preparation.do` and friends) are the only place where mutation-then-save of the cleaned dataset is allowed. Analysis scripts are read-only with respect to `$workingdata/`.
